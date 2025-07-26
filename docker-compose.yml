@@ -1,0 +1,132 @@
+services:
+  postgres-client:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: CLIENT_DB
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+    volumes:
+      - pg-data-client:/var/lib/postgresql/data
+
+  mspr-api-client:
+    build: ./MSPR-API-Client
+    environment:
+      POSTGRES_URL: jdbc:postgresql://postgres-client:5432/CLIENT_DB
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      RABBITMQ_PORT: 5672
+    depends_on:
+      - postgres-client
+      - rabbitmq
+
+  postgres-product:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: PRODUCT_DB
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+    volumes:
+      - pg-data-product:/var/lib/postgresql/data
+
+  mspr-api-product:
+    build: ./MSPR-API-Product
+    environment:
+      POSTGRES_URL: jdbc:postgresql://postgres-product:5432/PRODUCT_DB
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      RABBITMQ_PORT: 5672
+    depends_on:
+      - postgres-product
+      - rabbitmq
+
+  postgres-order:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ORDER_DB
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+    volumes:
+      - pg-data-order:/var/lib/postgresql/data
+
+  mspr-api-order:
+    build: ./MSPR-API-Order
+    environment:
+      POSTGRES_URL: jdbc:postgresql://postgres-order:5432/ORDER_DB
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      RABBITMQ_PORT: 5672
+    depends_on:
+      - postgres-order
+      - rabbitmq
+
+  mspr-api-gateway:
+    build: ./MSPR-API-Gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - CLIENT_URL=http://mspr-api-client:8081
+      - PRODUCT_URL=http://mspr-api-product:8082
+      - ORDER_URL=http://mspr-api-order:8083
+    depends_on:
+      - mspr-api-client
+      - mspr-api-product
+      - mspr-api-order
+
+  mspr-api-front:
+    build: ./MSPR-Front
+    ports:
+      - "3000:80"
+    depends_on:
+      - mspr-api-gateway
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.20
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - elk-data:/usr/share/elasticsearch/data
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.17.20
+    container_name: logstash
+    ports:
+      - "5000:5000"           # Port d'écoute TCP des logs
+    volumes:
+      - ./MSPR-Logstash/pipeline:/usr/share/logstash/pipeline
+    depends_on:
+      - elasticsearch
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.20
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+
+volumes:
+  pg-data-client:
+  pg-data-product:
+  pg-data-order:
+  elk-data:
